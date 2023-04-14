@@ -44,7 +44,7 @@ def e(*args, frame_index=1, **kvargs):
 
     vals = {}
 
-    vals.update(frame.f_globals)
+    vals |= frame.f_globals
     vals.update(frame.f_locals)
     vals.update(kvargs)
 
@@ -72,18 +72,18 @@ def cprint(*args, color=Fore.RESET, char='*', sep=' ', end='\n', frame_index=1, 
         'rst':    Style.NORMAL + Fore.RESET
     }
 
-    vals.update(frame.f_globals)
+    vals |= frame.f_globals
     vals.update(frame.f_locals)
     vals.update(kvargs)
 
     unfmt = ''
     if char is not None:
-        unfmt += color + '[' + Style.BRIGHT + char + Style.NORMAL + ']' + Fore.RESET + sep
+        unfmt += f'{color}[{Style.BRIGHT}{char}{Style.NORMAL}]{Fore.RESET}{sep}'
     unfmt += sep.join(args)
 
     fmted = unfmt
 
-    for attempt in range(10):
+    for _ in range(10):
         try:
             fmted = string.Formatter().vformat(unfmt, args, vals)
             break
@@ -118,19 +118,19 @@ def calculate_elapsed_time(start_time):
 
     elapsed_time = []
     if h == 1:
-        elapsed_time.append(str(h) + ' hour')
+        elapsed_time.append(f'{str(h)} hour')
     elif h > 1:
-        elapsed_time.append(str(h) + ' hours')
+        elapsed_time.append(f'{str(h)} hours')
 
     if m == 1:
-        elapsed_time.append(str(m) + ' minute')
+        elapsed_time.append(f'{str(m)} minute')
     elif m > 1:
-        elapsed_time.append(str(m) + ' minutes')
+        elapsed_time.append(f'{str(m)} minutes')
 
     if s == 1:
-        elapsed_time.append(str(s) + ' second')
+        elapsed_time.append(f'{str(s)} second')
     elif s > 1:
-        elapsed_time.append(str(s) + ' seconds')
+        elapsed_time.append(f'{str(s)} seconds')
     else:
         elapsed_time.append('less than a second')
 
@@ -163,57 +163,62 @@ with open(os.path.join(rootdir, 'config', 'global-patterns.toml'), 'r') as p:
     except toml.decoder.TomlDecodeError as e:
         fail('Error: Couldn\'t parse global-patterns.toml config file. Check syntax and duplicate tags.')
 
-if 'username_wordlist' in service_scans_config:
-    if isinstance(service_scans_config['username_wordlist'], str):
-        username_wordlist = service_scans_config['username_wordlist']
+if 'username_wordlist' in service_scans_config and isinstance(
+    service_scans_config['username_wordlist'], str
+):
+    username_wordlist = service_scans_config['username_wordlist']
 
-if 'password_wordlist' in service_scans_config:
-    if isinstance(service_scans_config['password_wordlist'], str):
-        password_wordlist = service_scans_config['password_wordlist']
+if 'password_wordlist' in service_scans_config and isinstance(
+    service_scans_config['password_wordlist'], str
+):
+    password_wordlist = service_scans_config['password_wordlist']
 
 async def read_stream(stream, target, tag='?', patterns=[], color=Fore.BLUE):
     address = target.address
     while True:
         line = await stream.readline()
-        if line:
-            line = str(line.rstrip(), 'utf8', 'ignore')
-            debug(color + '[' + Style.BRIGHT + address + ' ' + tag + Style.NORMAL + '] ' + Fore.RESET + '{line}', color=color)
-
-            for p in global_patterns:
-                matches = re.findall(p['pattern'], line)
-                if 'description' in p:
-                    for match in matches:
-                        if verbose >= 1:
-                            info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}' + p['description'].replace('{match}', '{bblue}{match}{crst}{bmagenta}') + '{rst}')
-                        async with target.lock:
-                            with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
-                                file.writelines(e('{tag} - ' + p['description'] + '\n\n'))
-                else:
-                    for match in matches:
-                        if verbose >= 1:
-                            info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}Matched Pattern: {bblue}{match}{rst}')
-                        async with target.lock:
-                            with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
-                                file.writelines(e('{tag} - Matched Pattern: {match}\n\n'))
-
-            for p in patterns:
-                matches = re.findall(p['pattern'], line)
-                if 'description' in p:
-                    for match in matches:
-                        if verbose >= 1:
-                            info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}' + p['description'].replace('{match}', '{bblue}{match}{crst}{bmagenta}') + '{rst}')
-                        async with target.lock:
-                            with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
-                                file.writelines(e('{tag} - ' + p['description'] + '\n\n'))
-                else:
-                    for match in matches:
-                        if verbose >= 1:
-                            info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}Matched Pattern: {bblue}{match}{rst}')
-                        async with target.lock:
-                            with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
-                                file.writelines(e('{tag} - Matched Pattern: {match}\n\n'))
-        else:
+        if not line:
             break
+        line = str(line.rstrip(), 'utf8', 'ignore')
+        debug(
+            f'{color}[{Style.BRIGHT}{address} {tag}{Style.NORMAL}] {Fore.RESET}'
+            + '{line}',
+            color=color,
+        )
+
+        for p in global_patterns:
+            matches = re.findall(p['pattern'], line)
+            if 'description' in p:
+                for match in matches:
+                    if verbose >= 1:
+                        info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}' + p['description'].replace('{match}', '{bblue}{match}{crst}{bmagenta}') + '{rst}')
+                    async with target.lock:
+                        with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
+                            file.writelines(e('{tag} - ' + p['description'] + '\n\n'))
+            else:
+                for match in matches:
+                    if verbose >= 1:
+                        info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}Matched Pattern: {bblue}{match}{rst}')
+                    async with target.lock:
+                        with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
+                            file.writelines(e('{tag} - Matched Pattern: {match}\n\n'))
+
+        for p in patterns:
+            matches = re.findall(p['pattern'], line)
+            if 'description' in p:
+                for match in matches:
+                    if verbose >= 1:
+                        info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}' + p['description'].replace('{match}', '{bblue}{match}{crst}{bmagenta}') + '{rst}')
+                    async with target.lock:
+                        with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
+                            file.writelines(e('{tag} - ' + p['description'] + '\n\n'))
+            else:
+                for match in matches:
+                    if verbose >= 1:
+                        info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}Matched Pattern: {bblue}{match}{rst}')
+                    async with target.lock:
+                        with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
+                            file.writelines(e('{tag} - Matched Pattern: {match}\n\n'))
 
 async def run_cmd(semaphore, cmd, target, tag='?', patterns=[]):
     async with semaphore:
@@ -257,34 +262,36 @@ async def parse_port_scan(stream, tag, target, pattern):
 
     while True:
         line = await stream.readline()
-        if line:
-            line = str(line.rstrip(), 'utf8', 'ignore')
-            debug(Fore.BLUE + '[' + Style.BRIGHT + address + ' ' + tag + Style.NORMAL + '] ' + Fore.RESET + '{line}', color=Fore.BLUE)
-
-            parse_match = re.search(pattern, line)
-            if parse_match:
-                ports.append(parse_match.group('port'))
-
-
-            for p in global_patterns:
-                matches = re.findall(p['pattern'], line)
-                if 'description' in p:
-                    for match in matches:
-                        if verbose >= 1:
-                            info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}' + p['description'].replace('{match}', '{bblue}{match}{crst}{bmagenta}') + '{rst}')
-                        async with target.lock:
-                            with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
-                                file.writelines(e('{tag} - ' + p['description'] + '\n\n'))
-                else:
-                    for match in matches:
-                        if verbose >= 1:
-                            info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}Matched Pattern: {bblue}{match}{rst}')
-                        async with target.lock:
-                            with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
-                                file.writelines(e('{tag} - Matched Pattern: {match}\n\n'))
-        else:
+        if not line:
             break
 
+        line = str(line.rstrip(), 'utf8', 'ignore')
+        debug(
+            f'{Fore.BLUE}[{Style.BRIGHT}{address} {tag}{Style.NORMAL}] {Fore.RESET}'
+            + '{line}',
+            color=Fore.BLUE,
+        )
+
+        if parse_match := re.search(pattern, line):
+            ports.append(parse_match['port'])
+
+
+        for p in global_patterns:
+            matches = re.findall(p['pattern'], line)
+            if 'description' in p:
+                for match in matches:
+                    if verbose >= 1:
+                        info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}' + p['description'].replace('{match}', '{bblue}{match}{crst}{bmagenta}') + '{rst}')
+                    async with target.lock:
+                        with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
+                            file.writelines(e('{tag} - ' + p['description'] + '\n\n'))
+            else:
+                for match in matches:
+                    if verbose >= 1:
+                        info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}Matched Pattern: {bblue}{match}{rst}')
+                    async with target.lock:
+                        with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
+                            file.writelines(e('{tag} - Matched Pattern: {match}\n\n'))
     return ports
 
 async def parse_service_detection(stream, tag, target, pattern):
@@ -293,33 +300,41 @@ async def parse_service_detection(stream, tag, target, pattern):
 
     while True:
         line = await stream.readline()
-        if line:
-            line = str(line.rstrip(), 'utf8', 'ignore')
-            debug(Fore.BLUE + '[' + Style.BRIGHT + address + ' ' + tag + Style.NORMAL + '] ' + Fore.RESET + '{line}', color=Fore.BLUE)
-
-            parse_match = re.search(pattern, line)
-            if parse_match:
-                services.append((parse_match.group('protocol').lower(), int(parse_match.group('port')), parse_match.group('service')))
-
-            for p in global_patterns:
-                matches = re.findall(p['pattern'], line)
-                if 'description' in p:
-                    for match in matches:
-                        if verbose >= 1:
-                            info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}' + p['description'].replace('{match}', '{bblue}{match}{crst}{bmagenta}') + '{rst}')
-                        async with target.lock:
-                            with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
-                                file.writelines(e('{tag} - ' + p['description'] + '\n\n'))
-                else:
-                    for match in matches:
-                        if verbose >= 1:
-                            info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}Matched Pattern: {bblue}{match}{rst}')
-                        async with target.lock:
-                            with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
-                                file.writelines(e('{tag} - Matched Pattern: {match}\n\n'))
-        else:
+        if not line:
             break
 
+        line = str(line.rstrip(), 'utf8', 'ignore')
+        debug(
+            f'{Fore.BLUE}[{Style.BRIGHT}{address} {tag}{Style.NORMAL}] {Fore.RESET}'
+            + '{line}',
+            color=Fore.BLUE,
+        )
+
+        if parse_match := re.search(pattern, line):
+            services.append(
+                (
+                    parse_match['protocol'].lower(),
+                    int(parse_match['port']),
+                    parse_match['service'],
+                )
+            )
+
+        for p in global_patterns:
+            matches = re.findall(p['pattern'], line)
+            if 'description' in p:
+                for match in matches:
+                    if verbose >= 1:
+                        info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}' + p['description'].replace('{match}', '{bblue}{match}{crst}{bmagenta}') + '{rst}')
+                    async with target.lock:
+                        with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
+                            file.writelines(e('{tag} - ' + p['description'] + '\n\n'))
+            else:
+                for match in matches:
+                    if verbose >= 1:
+                        info('Task {bgreen}{tag}{rst} on {byellow}{address}{rst} - {bmagenta}Matched Pattern: {bblue}{match}{rst}')
+                    async with target.lock:
+                        with open(os.path.join(target.scandir, '_patterns.log'), 'a') as file:
+                            file.writelines(e('{tag} - Matched Pattern: {match}\n\n'))
     return services
 
 async def run_portscan(semaphore, tag, target, service_detection, port_scan=None):
